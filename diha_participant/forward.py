@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 from .client import ApiClient, ApiError
+from .timebase import StableClock
 from .logger import Event, Pose
 from .uploader import TelemetryUploader
 
@@ -176,7 +177,12 @@ def main(argv: list[str] | None = None) -> int:
     token = os.environ.get(args.token_env)
     if not token:
         parser.error(f"environment variable {args.token_env} is not set")
-    client = ApiClient(args.api, token, args.session)
+    # Streams stamped here on receipt (VRPN) use a time base without steps, and the clock
+    # measurement uses the same one (see timebase.StableClock).
+    stable = StableClock() if args.vrpn and args.vrpn_stamps == "receive" else None
+    client = ApiClient(
+        args.api, token, args.session, **({"clock": stable.time_ns} if stable else {})
+    )
     spool = args.spool or Path(f"spool-{args.session}-{args.source}")
     uploader = TelemetryUploader(client, args.source, spool)
     fake_uploader, on_pose = None, None
@@ -239,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.vrpn_tracker,
                 int(port or 3883),
                 on_hint=lambda m: print(m, file=sys.stderr),
+                **({"clock": stable.time} if stable else {}),
             )
             try:
                 run_forever(client_vrpn, on_report, log=lambda m: print(m, file=sys.stderr))

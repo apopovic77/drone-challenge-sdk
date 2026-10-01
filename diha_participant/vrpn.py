@@ -71,8 +71,10 @@ class VrpnTrackerClient:
         sensor: int | None = 0,
         timeout_s: float = 5.0,
         on_hint: Callable[[str], None] | None = None,
+        clock: Callable[[], float] = time.time,
     ):
         self.host, self.port, self.tracker, self.sensor = host, port, tracker, sensor
+        self.clock = clock  # receive stamps; see timebase.StableClock
         self.timeout_s = timeout_s
         self.server_version = ""
         self.senders: dict[int, str] = {}
@@ -99,7 +101,7 @@ class VrpnTrackerClient:
                 if payload_len < 0:
                     raise VrpnError(f"corrupt VRPN header (length {length})")
                 body = _recv_exact(sock, _pad(payload_len))[:payload_len]
-                received = time.time()
+                received = self.clock()
                 if msg_type == SENDER_DESCRIPTION:
                     self.senders[sender] = _description_name(body)
                 elif msg_type == TYPE_DESCRIPTION:

@@ -23,7 +23,7 @@ from . import pairing
 from .course import Course
 
 __all__ = ["Course", "Drone", "__version__"]
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 
 class Drone(DroneLive):

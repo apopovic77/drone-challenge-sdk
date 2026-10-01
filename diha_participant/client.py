@@ -7,6 +7,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -28,7 +29,15 @@ class ApiError(RuntimeError):
 class ApiClient:
     """Minimal client for one session and one device token; no flight-control logic."""
 
-    def __init__(self, base_url: str, token: str, session_id: str, *, timeout_s: float = 3.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        session_id: str,
+        *,
+        timeout_s: float = 3.0,
+        clock: Callable[[], int] = time.time_ns,
+    ) -> None:
         parsed = urllib.parse.urlparse(base_url)
         if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in LOCAL_HOSTS):
             raise ValueError("API base_url must use HTTPS (plain HTTP only for localhost tests)")
@@ -38,6 +47,8 @@ class ApiClient:
         self.token = token
         self.session_id = session_id
         self.timeout_s = timeout_s
+        # The clock the device stamps with; clock measurements must use the same one.
+        self.clock_ns = clock
 
     def post_poses(self, source: str, items: list[dict]) -> dict:
         if source not in ("team", "reference"):
@@ -62,7 +73,7 @@ class ApiClient:
         best: tuple[int, int] | None = None
         failure: ApiError | None = None
         for _ in range(samples):
-            sent = time.time_ns()
+            sent = self.clock_ns()
             try:
                 answer = self.clock()
             except ApiError as exc:
@@ -70,9 +81,14 @@ class ApiClient:
                     raise
                 failure = exc  # a lost exchange only costs one sample
                 continue
-            received = time.time_ns()
+            received = self.clock_ns()
             server_in, server_out = int(answer["server_receive_ns"]), int(answer["server_send_ns"])
             rtt = (received - sent) - (server_out - server_in)
+            if rtt < 0:
+                # Only a local clock step during the exchange makes the round trip negative;
+                # such a sample says nothing about the offset (and must never look "best").
+                failure = ApiError("local clock changed during the clock measurement")
+                continue
             offset = ((server_in - sent) + (server_out - received)) // 2
             if best is None or rtt < best[1]:
                 best = (offset, rtt)
@@ -83,7 +99,7 @@ class ApiClient:
     def sync_clock(self, samples: int = 8) -> tuple[int, int]:
         """Measure the clock offset and report it so the server can document it."""
         offset, rtt = self.measure_clock(samples)
-        self.clock_report(offset, max(rtt, 0))
+        self.clock_report(offset, rtt)
         return offset, rtt
 
     def _request(self, method: str, resource: str, body: dict | None = None) -> dict:

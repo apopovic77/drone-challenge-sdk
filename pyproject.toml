@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drone-challenge"
-version = "0.6.0"
+version = "0.6.1"
 description = "Live telemetry SDK for the Drone Challenge: team estimate upload, ROS2/VRPN forwarders, offline CSV"
 requires-python = ">=3.10"
 dependencies = []

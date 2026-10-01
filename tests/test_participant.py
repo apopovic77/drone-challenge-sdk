@@ -37,3 +37,46 @@ def test_pose_timestamps_and_finite_values_are_checked(tmp_path):
     with pytest.raises(ValueError):
         Pose(2, float("nan"), 0, 0, 0)
 
+
+
+def test_clock_measurement_drops_exchanges_with_a_local_clock_step(monkeypatch):
+    """A negative round trip only happens when the local clock steps during the exchange;
+    such a sample must be dropped, not clipped to 0 (it would look like the best one)."""
+    import pytest
+
+    from diha_participant.client import ApiClient, ApiError
+
+    # Local clock readings around three exchanges: the second has a -3 s step inside.
+    readings = iter([1_000, 1_000 + 20_000_000, 5_000, 5_000 - 3_000_000_000, 9_000, 9_000 + 8_000_000])
+    api = ApiClient("http://127.0.0.1:9", "token", "a" * 32, clock=lambda: next(readings))
+    answers = iter(
+        [
+            {"server_receive_ns": 11_000_000, "server_send_ns": 11_000_000},
+            {"server_receive_ns": 15_000_000, "server_send_ns": 15_000_000},
+            {"server_receive_ns": 13_000_000, "server_send_ns": 13_000_000},
+        ]
+    )
+    monkeypatch.setattr(api, "clock", lambda: next(answers))
+    offset, rtt = api.measure_clock(samples=3)
+    assert rtt == 8_000_000  # the stepped exchange (rtt < 0) was not chosen
+    readings2 = iter([0, -1_000_000_000])
+    api.clock_ns = lambda: next(readings2)
+    monkeypatch.setattr(api, "clock", lambda: {"server_receive_ns": 5, "server_send_ns": 5})
+    with pytest.raises(ApiError):
+        api.measure_clock(samples=1)
+
+
+def test_stable_clock_never_steps_with_the_system_clock(monkeypatch):
+    from diha_participant import timebase
+
+    wall = iter([1_000_000_000_000])
+    mono = iter([5, 10, 20, 30])
+    monkeypatch.setattr(timebase.time, "time_ns", lambda: next(wall))
+    monkeypatch.setattr(timebase.time, "monotonic_ns", lambda: next(mono))
+    clock = timebase.StableClock()  # wall 1e12 at monotonic 5
+    # The system clock may now be stepped; only monotonic time advances this clock.
+    assert [clock.time_ns(), clock.time_ns(), clock.time_ns()] == [
+        1_000_000_000_005,
+        1_000_000_000_015,
+        1_000_000_000_025,
+    ]
