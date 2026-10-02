@@ -7,7 +7,7 @@ Python-Paket für Teams der **Drone Challenge** (Trajectory Lab): eigene Positio
 ## Installation
 
 ```bash
-pip install "git+https://github.com/apopovic77/drone-challenge-sdk@v0.6.0"
+pip install "git+https://github.com/apopovic77/drone-challenge-sdk@v0.7.0"
 ```
 
 Python ab 3.10, keine weiteren Abhängigkeiten. Für den ROS2-Weg wird `rclpy` aus eurer ROS2-Installation verwendet.
@@ -16,15 +16,15 @@ Python ab 3.10, keine weiteren Abhängigkeiten. Für den ROS2-Weg wird `rclpy` a
 
 ```bash
 drone-challenge login team03          # einmal pro Rechner, Passwort wird abgefragt
-drone-challenge courses               # freigegebene Kurse
-drone-challenge session new --course "Kursname"
+drone-challenge courses               # freigegebene Kurse, der aktive Challenge-Kurs ist markiert
+drone-challenge session new           # Session für den aktiven Challenge-Kurs (--course "Name" für einen anderen)
 drone-challenge course                # Wegpunkte relativ zur Startpose
 ```
 
 ```python
 from drone_challenge import Drone
 
-with Drone(course="Kursname") as drone:   # legt eine Session für den Kurs an
+with Drone() as drone:                    # angemeldet: neue Session für den aktiven Challenge-Kurs
     course = drone.course()               # course.waypoints: relativ zur Startpose
     drone.takeoff()
     while fliegt:
@@ -32,6 +32,8 @@ with Drone(course="Kursname") as drone:   # legt eine Session für den Kurs an
         if gnss_abgeschaltet:
             drone.switch()
 ```
+
+Den aktiven Challenge-Kurs legt der Veranstalter fest. `Drone(course="Kursname")` wählt einen anderen freigegebenen Kurs, `Drone(new_session=False)` bleibt bei einer Kopplung per QR-Code (`drone-challenge pair`). Ist kein Challenge-Kurs aktiv, warnt `Drone()` und zeichnet ohne Kopplung nur lokal auf.
 
 ROS2 ohne eigenen Code für die Posen:
 

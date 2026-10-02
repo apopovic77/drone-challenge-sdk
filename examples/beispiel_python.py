@@ -1,8 +1,9 @@
 """Drone Challenge: Positionsschätzung live übertragen, ohne ROS2.
 
 Einmal pro Rechner:  drone-challenge login team03
-Dann legt das Programm vor dem Flug selbst eine Session für den Kurs an (KURS unten).
-Ohne Anmeldung und mit KURS = None läuft es offline und zeichnet nur lokal auf;
+Dann legt das Programm vor jedem Flug selbst eine Session an: für den aktiven Challenge-Kurs,
+den der Veranstalter festlegt, oder für KURS, wenn ihr dort einen Namen eintragt.
+Ohne Anmeldung läuft es offline und zeichnet nur lokal auf;
 nachreichen mit:  drone-challenge upload flight-<Ordner>
 """
 
@@ -17,7 +18,7 @@ def eure_positionsschaetzung(t: float) -> tuple[float, float, float, float]:
     return math.sin(t / 3), math.cos(t / 3) - 1, 1.0, 0.0
 
 
-KURS = None  # z. B. "Zufallskurs" (Name oder Kurs-ID, siehe drone-challenge courses)
+KURS = None  # None: aktiver Challenge-Kurs; sonst z. B. "Zufallskurs" (drone-challenge courses)
 
 with Drone(course=KURS) as drone:
     drone.takeoff()

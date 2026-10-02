@@ -9,13 +9,17 @@
             if gnss_disabled:
                 drone.switch()
 
-Access comes from ``drone-challenge pair`` (once per session) or the DRONE_LIVE_*
-environment variables; without either, the same code records locally only.
+After ``drone-challenge login`` every ``Drone()`` creates its own session for the active
+challenge course the organiser set (``Drone(course=...)`` names another released course).
+Otherwise access comes from ``drone-challenge pair`` or the DRONE_LIVE_* environment
+variables; without any of them, the same code records locally only.
 Recording, upload in the background, retries, clock check and the files are handled
 inside (see ``diha_participant`` for the advanced API).
 """
 
 from __future__ import annotations
+
+import warnings
 
 from diha_participant.live import DroneLive
 
@@ -23,7 +27,7 @@ from . import pairing
 from .course import Course
 
 __all__ = ["Course", "Drone", "__version__"]
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 
 class Drone(DroneLive):
@@ -34,17 +38,34 @@ class Drone(DroneLive):
     never raises; returns False for a rejected sample.
     """
 
-    def __init__(self, course: str | None = None, trial_id: str | None = None, **options) -> None:
+    def __init__(
+        self,
+        course: str | None = None,
+        trial_id: str | None = None,
+        *,
+        new_session: bool = True,
+        **options,
+    ) -> None:
         """``course``: create a new session for this released course first (needs
-        ``drone-challenge login``); otherwise use the current pairing or the environment."""
-        if course:
-            from . import team
+        ``drone-challenge login``). Without it a logged-in computer creates one for the
+        active challenge course; ``new_session=False`` keeps the current pairing instead
+        (e.g. a QR code from the organiser). Not logged in: the pairing, the environment,
+        or offline recording."""
+        from . import team
 
-            team.new_session(course, trial_id)
-            env, stored = None, pairing.load()  # the session just created wins
-        else:
-            env = pairing.env_access()
-            stored = None if env else pairing.load()
+        env = None if course else pairing.env_access()
+        if course or (new_session and not env and team.load()):
+            try:
+                team.new_session(course, trial_id)  # course None: the active challenge course
+            except team.TeamError as exc:
+                if course:
+                    raise
+                warnings.warn(
+                    f"Keine Session für den Challenge-Kurs angelegt ({exc}); "
+                    "es gilt die bisherige Kopplung, sonst nur lokale Aufzeichnung.",
+                    stacklevel=2,
+                )
+        stored = None if env else pairing.load()  # a session just created wins
         source = env or stored or {}
         defaults = {}
         if stored:

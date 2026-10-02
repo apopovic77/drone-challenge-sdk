@@ -2,7 +2,7 @@
 
     drone-challenge login team03               # once per computer: team password -> team key
     drone-challenge courses                    # released courses
-    drone-challenge session new --course NAME  # create your own session before a flight
+    drone-challenge session new [--course NAME] # own session (default: active challenge course)
     drone-challenge pair                       # or: paste a pairing code (from QR / web page)
     drone-challenge status                     # what is paired, is the access valid
     drone-challenge ros2 /navigation/pose      # forward a ROS2 pose topic live
@@ -99,7 +99,11 @@ def cmd_courses(args, parser) -> int:
     if not items:
         print("Keine freigegebenen Kurse.")
     for c in items:
-        print(f"{c['course_id']:<32} {c['name']} (Version {c['version']}, {c['length_m']:.1f} m)")
+        mark = "  ← aktiver Challenge-Kurs" if c.get("active") else ""
+        print(
+            f"{c['course_id']:<32} {c['name']} (Version {c['version']}, "
+            f"{c['length_m']:.1f} m){mark}"
+        )
     return 0
 
 
@@ -231,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(run=cmd_courses)
     p = sub.add_parser("session", help="eigene Session anlegen")
     p.add_argument("action", choices=["new"])
-    p.add_argument("--course", required=True, help="Kurs-ID oder Kursname")
+    p.add_argument("--course", help="Kurs-ID oder Kursname (Standard: der aktive Challenge-Kurs)")
     p.add_argument("--trial", help="Versuchsname (Standard: FLUG-<Datum-Uhrzeit>)")
     p.add_argument("--start", choices=["system_start", "takeoff"], default="system_start")
     p.set_defaults(run=cmd_session)
