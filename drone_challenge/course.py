@@ -12,7 +12,7 @@ start, +X to its right, +Z up. A course is drawn relative to its start; where th
 really stands in the hall does not matter.
 
 Hall frame: once the hall's motion capture has measured the drone at the start event,
-the server binds the course anchor (contract: Content post #5127) and
+the server binds the course anchor and
 ``course.hall_waypoints()`` gives the same points in hall coordinates:
 
     p_hall = measured_start + Rz(rotation) * (p - course_start)

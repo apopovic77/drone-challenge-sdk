@@ -3,7 +3,8 @@
     from drone_challenge.ros2 import Challenge
 
     challenge = Challenge(self)      # in __init__ of your node
-    challenge.takeoff()
+    challenge.start()                # system_start: without it the flight is not scored
+    challenge.takeoff()              # optional
     challenge.switch()               # external positioning (GNSS emulation) off
     challenge.stop()                 # end of flight
 
