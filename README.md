@@ -7,8 +7,10 @@ Python-Paket für Teams der **Drone Challenge** (Trajectory Lab): eigene Positio
 ## Installation
 
 ```bash
-pip install "git+https://github.com/apopovic77/drone-challenge-sdk@v0.7.0"
+python3 -m pip install ./drone-challenge-0.7.4.zip
 ```
+
+Das ZIP vorher unter **Dokumentation → Downloads** herunterladen und den Befehl im Download-Ordner ausführen. Alternativ nach dem Entpacken im Ordner mit `pyproject.toml`: `python3 -m pip install .`.
 
 Python ab 3.10, keine weiteren Abhängigkeiten. Für den ROS2-Weg wird `rclpy` aus eurer ROS2-Installation verwendet.
 
@@ -54,6 +56,8 @@ Geheimnisse (Passwort, Team-Schlüssel, Session-Token) werden nie als Kommandoze
 
 ## Tests
 
+Im öffentlichen Quellcode-Repository liegen eigenständig ausführbare Tests. Das Download-ZIP enthält Paket und Beispiele, keine Tests.
+
 ```bash
 pip install pytest && pytest
 ```
@@ -64,4 +68,14 @@ Dieses Repository wird aus der Plattform veröffentlicht. Fragen und Fehler bitt
 
 Live-Flüge werden ab `system_start` gewertet, ohne GNSS-Emulation oder Zehn-Sekunden-Frist. `Drone` meldet den Start beim Eintritt in den `with`-Block; `drone.start()` ist idempotent. Ohne Kontextmanager vor dem Abheben ausdrücklich `drone.start()` aufrufen. Bei ROS2 meldet `drone-challenge event start` den Start. `switch()` bleibt für alte Aufrufer als protokolliertes Ereignis erhalten, beeinflusst die Live-Wertung aber nicht.
 
-`drone.course().start_rule` und `.assist_distance_m` sowie `drone-challenge course --json` liefern die eingefrorene Sessionregel. Fehlende Starthilfe bedeutet 0 m. Liefert ein älterer Server keine `start_rule`, ist sie im SDK `None` (JSON `null`): Die Regel dieses Servers ist dann unbekannt. Positive Meterwerte sind derzeit nur für Kursentwürfe erlaubt; Freigabe und Sessionstart lehnt der Server ab, bis die streckenabhängige Referenz-Starthilfe verfügbar ist. Der historische CSV-Import mit `switch.txt` bleibt unverändert.
+`drone.course().start_rule`, `.assist_distance_m` und `.assist_max_s` sowie `drone-challenge course --json` liefern die eingefrorene Sessionregel. Fehlende Starthilfe bedeutet 0 m, eine fehlende Zeitgrenze 10 s. Liefert ein älterer Server keine `start_rule`, ist sie im SDK `None` (JSON `null`): Die Regel dieses Servers ist dann unbekannt. Der historische CSV-Import mit `switch.txt` bleibt unverändert.
+
+### Freiwillige Starthilfe ab 0.7.4
+
+Der Veranstalter kann bei einem Kurs mit vorgegebener Route Starthilfe freigeben, etwa **2 m / 10 s**. Sie endet an der zuerst erreichten Grenze: Fortschritt entlang der öffentlichen Sollroute oder Zeit seit `system_start`. Die Wertung beginnt trotzdem am Start. Bei 0 m bleibt die Hilfe aus. Advanced-Kurse ohne vorgegebene Route bieten in dieser Stufe keine Starthilfe; positive Werte werden bei Freigabe und Sessionstart abgelehnt.
+
+Es erfolgt kein automatischer Abruf. `drone.assist()` fragt einmal ab; offline kommt `None`. Nur eine Antwort mit `pose` enthält eine aktuelle Messung. Die Pose bezieht sich auf M0 im Hallenframe: Position in Metern, Yaw in Radiant, `stamp_ns` als Unix-Nanosekunden-String. Bei `pose=None` darf eine zuvor gelieferte Position nicht weiter als aktuelle Hilfe verwendet werden.
+
+Für regelmäßige Abrufe kann das Team ausdrücklich `drone.watch_assist(callback, interval_s=0.1)` verwenden. Der Callback läuft auf einem eigenen Thread und erhält auch Antworten ohne Pose; die Subscription mit `close()` oder einem Kontextmanager beenden. Neben einem bestehenden Forwarder `Drone(new_session=False)` mit derselben Kopplung verwenden, damit keine zweite Session entsteht. Eigene Positionsschätzungen werden weiterhin selbst berechnet und übertragen.
+
+ROS2 bietet opt-in `AssistancePublisher(node, drone)` aus `drone_challenge.ros2`: `geometry_msgs/PoseStamped` auf `/drone_challenge/assist`, originaler Zeitstempel und Hallenframe, volatile QoS mit Tiefe 1 und Lebensdauer 0,5 s. Bei Ende `close()` aufrufen. Empfänger müssen Zeitstempelalter und ausbleibende Nachrichten beachten; das Topic sendet keinen separaten Ende-Status.

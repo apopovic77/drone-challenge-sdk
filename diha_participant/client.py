@@ -65,6 +65,26 @@ class ApiClient:
         """Planned route, course geometry and anchor of this session (raw, hall frame)."""
         return self._request("GET", "course")
 
+    def assist(self) -> dict:
+        """One optional M0 fix in hall coordinates, or pose=None. Never cached.
+
+        RTT uses a monotonic clock. Conservatively include the whole RTT in pose age
+        and remaining time; no local/server clock assumption is needed.
+        """
+        sent = time.monotonic()
+        value = self._request("GET", "assist")
+        rtt = time.monotonic() - sent
+        value["request_rtt_s"] = rtt
+        pose = value.get("pose")
+        if pose is not None:
+            age = pose["age_s"] + rtt
+            remaining = (int(value["deadline_ns"]) - int(value["server_time_ns"])) / 1e9
+            if age > value["max_pose_age_s"] or remaining <= rtt:
+                value.update(pose=None, status="unavailable", reason="transport_expired")
+            else:
+                value["pose_age_upper_bound_s"] = age
+        return value
+
     def clock_report(self, offset_ns: int, rtt_ns: int) -> dict:
         return self._request("POST", "clock-reports", {"offset_ns": offset_ns, "rtt_ns": rtt_ns})
 

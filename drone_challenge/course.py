@@ -43,6 +43,7 @@ class Course:
         self.version: int | None = course.get("version")
         self.name: str | None = course.get("name")
         self.assist_distance_m: float = float(response.get("assist_distance_m", 0.0))
+        self.assist_max_s: float = float(response.get("assist_max_s", 10.0))
         # Older servers do not advertise a rule; do not infer their scoring policy.
         self.start_rule: str | None = response.get("start_rule")
         self.route_mode: str = course.get("route_mode", "prescribed")

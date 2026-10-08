@@ -26,7 +26,7 @@ from . import pairing
 from .course import Course
 
 __all__ = ["Course", "Drone", "__version__"]
-__version__ = "0.7.3"
+__version__ = "0.7.4"
 
 
 class Drone(DroneLive):
@@ -85,6 +85,15 @@ class Drone(DroneLive):
         if self.client is None:
             return None
         return Course(self.client.course())
+
+    def assist(self) -> dict | None:
+        """Explicitly request optional assistance; None offline, pose=None when gated."""
+        return self.client.assist() if self.client else None
+
+    def watch_assist(self, callback, interval_s: float = 0.1):
+        """Opt-in callback subscription; close it explicitly or use a with block."""
+        from .assistance import AssistanceSubscription
+        return AssistanceSubscription(self.assist, callback, interval_s)
 
     def pose(
         self,
