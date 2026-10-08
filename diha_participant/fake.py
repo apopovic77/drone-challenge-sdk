@@ -8,6 +8,7 @@ never meant for scoring.
 
 from __future__ import annotations
 
+import math
 import random
 
 from .logger import Event, Pose
@@ -23,7 +24,12 @@ class FakeTeam:
         noise_m: float = 0.005,
         switch_after_s: float = 5.0,
         seed: int = 1,
+        start_delay_s: float = 0.0,
     ) -> None:
+        if not math.isfinite(start_delay_s) or start_delay_s < 0:
+            raise ValueError("start_delay_s must be finite and nonnegative")
+        self.start_delay_s = start_delay_s
+        self.first_pose: float | None = None
         self.uploader = uploader
         self.drift = drift_m_per_s
         self.noise = noise_m
@@ -34,6 +40,10 @@ class FakeTeam:
         self.last: float | None = None
 
     def __call__(self, pose: Pose) -> None:
+        if self.first_pose is None:
+            self.first_pose = pose.stamp_s
+        if pose.stamp_s - self.first_pose < self.start_delay_s:
+            return
         if self.start is None:
             self.start = pose.stamp_s
             self.uploader.record_event(Event("system_start", pose.stamp_s))

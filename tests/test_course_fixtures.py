@@ -14,6 +14,13 @@ CANDIDATES = [
 ]
 
 
+def test_scoring_rule_is_unknown_for_older_servers_and_preserves_advertised_rules():
+    assert Course({}).start_rule is None
+    assert Course({"assist_distance_m": 0}).start_rule is None
+    for rule in ("from_start", "earlier_of_switch_and_start_plus_10s"):
+        assert Course({"start_rule": rule}).start_rule == rule
+
+
 def test_course_formula_matches_the_shared_fixtures():
     fixtures = json.loads(next(p for p in CANDIDATES if p.exists()).read_text())
     for case in fixtures["cases"]:

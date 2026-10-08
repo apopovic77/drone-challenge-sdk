@@ -3,11 +3,10 @@
     from drone_challenge import Drone
 
     with Drone() as drone:
+        drone.start()                 # already emitted by the context manager; idempotent
         drone.takeoff()
         while flying:
             drone.pose(x, y, z, yaw, timestamp)
-            if gnss_disabled:
-                drone.switch()
 
 After ``drone-challenge login`` every ``Drone()`` creates its own session for the active
 challenge course the organiser set (``Drone(course=...)`` names another released course).
@@ -27,11 +26,13 @@ from . import pairing
 from .course import Course
 
 __all__ = ["Course", "Drone", "__version__"]
-__version__ = "0.7.1"
+__version__ = "0.7.3"
 
 
 class Drone(DroneLive):
-    """The participant interface: ``pose()``, ``takeoff()``, ``switch()``, ``stop()``.
+    """The participant interface: ``start()``, ``pose()``, ``takeoff()``, ``stop()``.
+
+    ``switch()`` remains a recorded compatibility event, without changing live scoring.
 
     ``pose(x, y, z, yaw, timestamp)``: metres and radians in the hall frame; ``timestamp``
     (Unix seconds) is the time the estimate refers to and defaults to now. Never blocks,

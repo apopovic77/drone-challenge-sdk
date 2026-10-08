@@ -4,7 +4,7 @@ Positionen veröffentlicht euer Node ohnehin (PoseStamped/Odometry …). Daneben
     drone-challenge session new          # Session für den aktiven Challenge-Kurs
     drone-challenge ros2 /drohne/pose
 
-Dieser Node zeigt, wie Start, Umschaltung und Ende gemeldet werden.
+Dieser Node zeigt, wie Start und Ende gemeldet werden. Die Wertung beginnt am Start.
 """
 
 import rclpy
@@ -19,14 +19,8 @@ class Mission(Node):
         self.challenge = Challenge(self)
         self.challenge.start()  # system_start: ohne Start-Ereignis keine Wertung
         self.challenge.takeoff()  # optional
-        self.create_timer(5.0, self.umschalten)  # Beispiel: nach 5 s Umschaltung
         self.create_timer(30.0, self.ende)
-        self._umgeschaltet = self._beendet = False
-
-    def umschalten(self) -> None:
-        if not self._umgeschaltet:
-            self.challenge.switch()
-            self._umgeschaltet = True
+        self._beendet = False
 
     def ende(self) -> None:
         if not self._beendet:

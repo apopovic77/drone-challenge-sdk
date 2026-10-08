@@ -5,7 +5,6 @@
     challenge = Challenge(self)      # in __init__ of your node
     challenge.start()                # system_start: without it the flight is not scored
     challenge.takeoff()              # optional
-    challenge.switch()               # external positioning (GNSS emulation) off
     challenge.stop()                 # end of flight
 
 Each call is stamped once with the node clock (or ``stamp=msg.header.stamp``) and
@@ -30,6 +29,7 @@ class Challenge:  # pragma: no cover - needs a ROS2 installation
         return self._events.emit("takeoff", stamp)
 
     def switch(self, stamp=None) -> str:
+        """Record a compatibility event; live scoring still begins at start()."""
         return self._events.emit("switch", stamp)
 
     def stop(self, stamp=None) -> str:

@@ -23,6 +23,7 @@ Before that (or in a practice session without motion capture) it returns None.
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 
 __all__ = ["Course", "from_response"]
 
@@ -41,6 +42,17 @@ class Course:
         self.course_id: str | None = course.get("course_id")
         self.version: int | None = course.get("version")
         self.name: str | None = course.get("name")
+        self.assist_distance_m: float = float(response.get("assist_distance_m", 0.0))
+        # Older servers do not advertise a rule; do not infer their scoring policy.
+        self.start_rule: str | None = response.get("start_rule")
+        self.route_mode: str = course.get("route_mode", "prescribed")
+        self.motion_model: str = course.get("motion_model", "flight")
+        self.marker_height_m: float = float(course.get("marker_height_m", 0.2))
+        self.environment: dict | None = deepcopy(course.get("environment"))
+        self.obstacles: list[dict] = deepcopy(course.get("obstacles", []))
+        self.hall: dict | None = deepcopy(course.get("hall"))
+        self.drone_profile: dict | None = deepcopy(course.get("drone_profile"))
+        self.geometry_anchored: bool = bool(course.get("geometry_anchored"))
         self.start_yaw_deg: float = float(course.get("start_yaw_deg") or 0.0)
         route = response.get("route") or []
         points = course.get("waypoints") or [
@@ -59,7 +71,22 @@ class Course:
                 self._hall_waypoints[0]["z"],
             )
         self.course_start: tuple[float, float, float] = first
+        if self.route_mode == "environment" and self.environment:
+            self.course_start = tuple(map(float, self.environment["start"]))
         self.anchor: dict | None = response.get("anchor")
+
+    @property
+    def goal(self) -> tuple[float, float, float] | None:
+        """Advanced goal relative to the start pose; the team plans its own path."""
+        return self._relative(tuple(self.environment["goal"])) if self.environment else None
+
+    def hall_goal(self) -> tuple[float, float, float] | None:
+        """Goal in the tracked hall frame only after a bound start anchor exists."""
+        return (
+            self._to_hall(tuple(self.environment["goal"]))
+            if self.environment and self.anchored
+            else None
+        )
 
     # Relative to the start pose -------------------------------------------------------------
 

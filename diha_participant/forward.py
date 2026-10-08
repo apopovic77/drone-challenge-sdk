@@ -205,7 +205,16 @@ def main(argv: list[str] | None = None) -> int:
         fake_uploader = TelemetryUploader(
             ApiClient(team_api, team_token, team_session), "team", spool / "fake-team"
         )
-        on_pose = FakeTeam(fake_uploader, drift_m_per_s=args.fake_drift)
+        on_pose = FakeTeam(
+            fake_uploader,
+            drift_m_per_s=args.fake_drift,
+            start_delay_s=0.5 if args.hall else 0.0,
+        )
+        if args.hall:
+            print(
+                "Hall start: 0.5 s reference pre-roll; keep the body still through start + 0.25 s.",
+                file=sys.stderr,
+            )
         print("FAKE TEAM ACTIVE: team stream is a drifting copy of the reference", file=sys.stderr)
     stop = threading.Event()
     if args.clock_sync_interval is None:

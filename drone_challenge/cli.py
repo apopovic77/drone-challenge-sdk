@@ -7,7 +7,7 @@
     drone-challenge status                     # what is paired, is the access valid
     drone-challenge ros2 /navigation/pose      # forward a ROS2 pose topic live
     drone-challenge upload flight-<session>    # hand in a recorded flight afterwards
-    drone-challenge event switch               # mark an event now (start|takeoff|switch|stop)
+    drone-challenge event start                # before take-off; scoring begins here
 
 The token never appears on a command line: it comes from the stored pairing or the
 DRONE_LIVE_* environment variables.
@@ -147,7 +147,9 @@ def cmd_course(args, parser) -> int:
     points = hall if args.hall else course.waypoints
     if args.json:
         print(json.dumps({"course_id": course.course_id, "version": course.version,
-                          "frame": "hall" if args.hall else "start", "waypoints": points}))
+                          "frame": "hall" if args.hall else "start", "waypoints": points,
+                          "start_rule": course.start_rule, "assist_distance_m": course.assist_distance_m,
+                          "motion_model": course.motion_model, "marker_height_m": course.marker_height_m}))
         return 0
     name = course.name or "eigene Sollroute"
     frame = "Hallenkoordinaten" if args.hall else "relativ zur Startpose (y = vorne beim Start)"

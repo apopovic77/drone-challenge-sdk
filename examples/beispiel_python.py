@@ -21,15 +21,12 @@ def eure_positionsschaetzung(t: float) -> tuple[float, float, float, float]:
 KURS = None  # None: aktiver Challenge-Kurs; sonst z. B. "Zufallskurs" (drone-challenge courses)
 
 with Drone(course=KURS) as drone:
+    drone.start()  # bereits beim Eintritt gemeldet; wiederholter Aufruf bleibt wirkungslos
     drone.takeoff()
     start = time.time()
-    umgeschaltet = False
     while time.time() - start < 20:  # euer Flug
         t_messung = time.time()  # Zeitpunkt, für den die Schätzung gilt (Systemuhr)
         x, y, z, yaw = eure_positionsschaetzung(t_messung)
         drone.pose(x, y, z, yaw, t_messung)
-        if not umgeschaltet and time.time() - start > 5:
-            drone.switch()  # externe Positionierung (GNSS-Nachbildung) aus
-            umgeschaltet = True
         time.sleep(1 / 30)  # 30 Positionen pro Sekunde
 print(f"fertig: {drone.pending} offen, {drone.dropped} verworfen, Dateien in {drone.directory}")

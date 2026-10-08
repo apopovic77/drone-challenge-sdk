@@ -25,12 +25,11 @@ drone-challenge course                # Wegpunkte relativ zur Startpose
 from drone_challenge import Drone
 
 with Drone() as drone:                    # angemeldet: neue Session für den aktiven Challenge-Kurs
+    drone.start()                         # vor dem Abheben; bereits durch with gemeldet
     course = drone.course()               # course.waypoints: relativ zur Startpose
     drone.takeoff()
     while fliegt:
         drone.pose(x, y, z, yaw, zeitstempel)   # Hallenkoordinaten, M0, Unix-Sekunden
-        if gnss_abgeschaltet:
-            drone.switch()
 ```
 
 Den aktiven Challenge-Kurs legt der Veranstalter fest. `Drone(course="Kursname")` wählt einen anderen freigegebenen Kurs, `Drone(new_session=False)` bleibt bei einer Kopplung per QR-Code (`drone-challenge pair`). Ist kein Challenge-Kurs aktiv, warnt `Drone()` und zeichnet ohne Kopplung nur lokal auf.
@@ -60,3 +59,9 @@ pip install pytest && pytest
 ```
 
 Dieses Repository wird aus der Plattform veröffentlicht. Fragen und Fehler bitte an den Veranstalter der Drone Challenge.
+
+### Start und Wertung
+
+Live-Flüge werden ab `system_start` gewertet, ohne GNSS-Emulation oder Zehn-Sekunden-Frist. `Drone` meldet den Start beim Eintritt in den `with`-Block; `drone.start()` ist idempotent. Ohne Kontextmanager vor dem Abheben ausdrücklich `drone.start()` aufrufen. Bei ROS2 meldet `drone-challenge event start` den Start. `switch()` bleibt für alte Aufrufer als protokolliertes Ereignis erhalten, beeinflusst die Live-Wertung aber nicht.
+
+`drone.course().start_rule` und `.assist_distance_m` sowie `drone-challenge course --json` liefern die eingefrorene Sessionregel. Fehlende Starthilfe bedeutet 0 m. Liefert ein älterer Server keine `start_rule`, ist sie im SDK `None` (JSON `null`): Die Regel dieses Servers ist dann unbekannt. Positive Meterwerte sind derzeit nur für Kursentwürfe erlaubt; Freigabe und Sessionstart lehnt der Server ab, bis die streckenabhängige Referenz-Starthilfe verfügbar ist. Der historische CSV-Import mit `switch.txt` bleibt unverändert.

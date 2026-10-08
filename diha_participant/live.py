@@ -3,10 +3,10 @@
     from diha_participant import DroneLive
 
     with DroneLive() as live:          # URL, session and token from the environment
+        live.start()                  # already emitted by __enter__; idempotent
         live.takeoff()
         while flying:
             live.pose(x, y, z, yaw)    # timestamp = now, or pass stamp=...
-        live.switch()                  # external positioning off
     # leaving the block sends flight_end, flushes the upload and writes the local files
 
 Everything else is handled inside: clock synchronisation with the server, a local
@@ -135,7 +135,7 @@ class DroneLive:
         self._event("takeoff", stamp)
 
     def switch(self, stamp: float | None = None) -> None:
-        """External positioning is switched off from here on (start of the scored part)."""
+        """Record a legacy event; it does not change the live scoring window."""
         self._event("switch", stamp)
 
     def pose(
