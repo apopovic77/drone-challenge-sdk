@@ -102,16 +102,23 @@ def courses() -> list[dict]:
 
 
 def new_session(
-    course: str | None = None, trial_id: str | None = None, start: str = "system_start"
+    course: str | None = None, trial_id: str | None = None, start: str = "system_start",
+    *, size_m=None
 ) -> dict:
     """Create a session for a released course (None: the active challenge course the
     organiser set); it becomes the current pairing."""
     data = _require()
+    from .vehicle import validate_size, warn_profile
+
+    size_m = validate_size(size_m)
     body = {"start_event_kind": start}
+    if size_m is not None:
+        body["size_m"] = size_m
     if course:
         body["course"] = course
     if trial_id:
         body["trial_id"] = trial_id
     answer = _call(data["api"], "POST", "sessions", body, key=data["key"])
     pairing.save(pairing.parse(json.dumps(answer["pairing"])))
+    warn_profile(answer["session"]["config"].get("vehicle_profile"))
     return answer

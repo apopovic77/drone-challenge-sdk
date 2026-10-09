@@ -7,7 +7,7 @@ Python-Paket für Teams der **Drone Challenge** (Trajectory Lab): eigene Positio
 ## Installation
 
 ```bash
-python3 -m pip install ./drone-challenge-0.7.4.zip
+python3 -m pip install ./drone-challenge-0.7.5.zip
 ```
 
 Das ZIP vorher unter **Dokumentation → Downloads** herunterladen und den Befehl im Download-Ordner ausführen. Alternativ nach dem Entpacken im Ordner mit `pyproject.toml`: `python3 -m pip install .`.
@@ -79,3 +79,41 @@ Es erfolgt kein automatischer Abruf. `drone.assist()` fragt einmal ab; offline k
 Für regelmäßige Abrufe kann das Team ausdrücklich `drone.watch_assist(callback, interval_s=0.1)` verwenden. Der Callback läuft auf einem eigenen Thread und erhält auch Antworten ohne Pose; die Subscription mit `close()` oder einem Kontextmanager beenden. Neben einem bestehenden Forwarder `Drone(new_session=False)` mit derselben Kopplung verwenden, damit keine zweite Session entsteht. Eigene Positionsschätzungen werden weiterhin selbst berechnet und übertragen.
 
 ROS2 bietet opt-in `AssistancePublisher(node, drone)` aus `drone_challenge.ros2`: `geometry_msgs/PoseStamped` auf `/drone_challenge/assist`, originaler Zeitstempel und Hallenframe, volatile QoS mit Tiefe 1 und Lebensdauer 0,5 s. Bei Ende `close()` aufrufen. Empfänger müssen Zeitstempelalter und ausbleibende Nachrichten beachten; das Topic sendet keinen separaten Ende-Status.
+
+### Fahrzeuggröße ab 0.7.5
+
+Optional beim Anlegen einer neuen Session (Breite, Tiefe, Höhe in Metern,
+**einschließlich Propeller**):
+
+```python
+with Drone(course="stiegenhaus-ideal", size_m=(0.35, 0.35, 0.12)) as drone:
+    profile = drone.course().vehicle_profile
+    # Wie gewohnt eigene Posen senden.
+```
+
+Jede Dimension muss endlich, größer als 0 und höchstens 5 m sein. Ohne Angabe
+bleibt das Kursprofil maßgeblich. Eine für das Team hinterlegte Veranstaltergröße
+hat Vorrang; eine abweichende Teamangabe wird gespeichert und als Warnung angezeigt.
+Der Sicherheitsabstand kommt immer aus dem Kurs. Session, Kursantwort und Bericht
+weisen die eingefrorene Größe und ihre Herkunft aus. Die Größe kann während einer
+Session nicht geändert werden. Eine neue Veranstaltervorgabe gilt erst beim nächsten
+Sessionstart.
+
+```bash
+drone-challenge session new --course stiegenhaus-ideal --size-m 0.35 0.35 0.12
+drone-live --new-session --course stiegenhaus-ideal --size-m 0.35 0.35 0.12 --ros2-pose-topic /team/pose
+```
+
+Dafür ist der Team-Login erforderlich. Mit bestehender Kopplung,
+`new_session=False`, `DRONE_LIVE_*`-Zugang oder rein offline kann `size_m` kein
+Profil ändern; der SDK-Konstruktor meldet dann einen Fehler. Bei `drone-live`
+erfordert `--size-m` ausdrücklich `--new-session`. Für Hallentests geht das auch
+mit `--hall --fake-team --api …` und dem separat gesetzten `DRONE_HALL_KEY`.
+
+Die Sollroute wird mit der Sessiongröße erneut geprüft. Bei zu wenig Abstand kommt
+eine Warnung mit Minimum, erforderlichem Abstand und Unterschreitung; der Start
+bleibt erlaubt. Advanced hat keine öffentliche Sollroute für diesen Nachweis.
+Kurse ohne Fahrzeugprofil bleiben unverändert: Größen werden gespeichert und
+angezeigt, aber nicht ausgewertet. Das Modell bleibt eine Hüllkugel um M0, am Boden
+ein Hüllkreis unter M0; ein Versatz zwischen Marker und Fahrzeugmitte wird nicht
+berücksichtigt.

@@ -111,8 +111,8 @@ def cmd_session(args, parser) -> int:
     from . import team
 
     try:
-        answer = team.new_session(args.course, args.trial, args.start)
-    except team.TeamError as exc:
+        answer = team.new_session(args.course, args.trial, args.start, size_m=args.size_m)
+    except (team.TeamError, ValueError) as exc:
         print(f"Session nicht angelegt: {exc}", file=sys.stderr)
         return 1
     config = answer["session"]["config"]
@@ -149,7 +149,7 @@ def cmd_course(args, parser) -> int:
         print(json.dumps({"course_id": course.course_id, "version": course.version,
                           "frame": "hall" if args.hall else "start", "waypoints": points,
                           "start_rule": course.start_rule, "assist_distance_m": course.assist_distance_m,
-                          "motion_model": course.motion_model, "marker_height_m": course.marker_height_m}))
+                          "motion_model": course.motion_model, "marker_height_m": course.marker_height_m, "vehicle_profile": course.vehicle_profile}))
         return 0
     name = course.name or "eigene Sollroute"
     frame = "Hallenkoordinaten" if args.hall else "relativ zur Startpose (y = vorne beim Start)"
@@ -240,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--course", help="Kurs-ID oder Kursname (Standard: der aktive Challenge-Kurs)")
     p.add_argument("--trial", help="Versuchsname (Standard: FLUG-<Datum-Uhrzeit>)")
     p.add_argument("--start", choices=["system_start", "takeoff"], default="system_start")
+    p.add_argument("--size-m", type=float, nargs=3, metavar=("WIDTH", "DEPTH", "HEIGHT"))
     p.set_defaults(run=cmd_session)
     p = sub.add_parser("course", help="Kurs der aktuellen Session: Wegpunkte ab Start")
     p.add_argument("--hall", action="store_true", help="in Hallenkoordinaten (nach Startmessung)")

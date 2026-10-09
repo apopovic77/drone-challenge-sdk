@@ -38,6 +38,7 @@ class Course:
 
     def __init__(self, response: dict) -> None:
         self.raw = response
+        self.vehicle_profile: dict | None = deepcopy(response.get("vehicle_profile"))
         course = response.get("course") or {}
         self.course_id: str | None = course.get("course_id")
         self.version: int | None = course.get("version")

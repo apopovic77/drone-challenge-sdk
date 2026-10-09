@@ -24,9 +24,10 @@ from diha_participant.live import DroneLive
 
 from . import pairing
 from .course import Course
+from .vehicle import validate_size
 
 __all__ = ["Course", "Drone", "__version__"]
-__version__ = "0.7.4"
+__version__ = "0.7.5"
 
 
 class Drone(DroneLive):
@@ -45,6 +46,7 @@ class Drone(DroneLive):
         trial_id: str | None = None,
         *,
         new_session: bool = True,
+        size_m: tuple[float, float, float] | None = None,
         **options,
     ) -> None:
         """``course``: create a new session for this released course first (needs
@@ -54,12 +56,16 @@ class Drone(DroneLive):
         or offline recording."""
         from . import team
 
+        size_m = validate_size(size_m)
         env = None if course else pairing.env_access()
+        if size_m is not None and (not new_session or env or not team.load()):
+            raise ValueError("size_m requires a new session with team login; existing pairings "
+                             "and offline recordings cannot change a frozen session profile")
         if course or (new_session and not env and team.load()):
             try:
-                team.new_session(course, trial_id)  # course None: the active challenge course
+                team.new_session(course, trial_id, size_m=size_m)
             except team.TeamError as exc:
-                if course:
+                if course or size_m is not None:
                     raise
                 warnings.warn(
                     f"Keine Session für den Challenge-Kurs angelegt ({exc}); "

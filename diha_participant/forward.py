@@ -164,7 +164,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--fake-drift", type=float, default=0.003, help="fake team drift in m/s after switch"
     )
+    parser.add_argument("--new-session", action="store_true",
+                        help="create a team session using drone-challenge login before forwarding")
+    parser.add_argument("--course", help="released course for --new-session; otherwise active course")
+    parser.add_argument("--trial", help="trial id for --new-session")
+    parser.add_argument("--size-m", type=float, nargs=3, metavar=("WIDTH", "DEPTH", "HEIGHT"),
+                        help="vehicle dimensions in metres; requires --new-session")
     args = parser.parse_args(argv)
+    new_access = None
+    if not args.new_session and (args.size_m is not None or args.course or args.trial):
+        parser.error("--size-m, --course and --trial require --new-session; existing profiles are frozen")
+    if args.new_session:
+        if args.hall and not args.fake_team or not args.hall and args.source != "team":
+            parser.error("--new-session needs a team stream or --hall --fake-team")
+        if args.hall and (not args.api or not os.environ.get("DRONE_HALL_KEY")):
+            parser.error("--hall --new-session needs --api and DRONE_HALL_KEY")
+        from drone_challenge import team as team_account
+        try:
+            created = team_account.new_session(args.course, args.trial, size_m=args.size_m)
+        except (team_account.TeamError, ValueError) as exc:
+            parser.error(str(exc))
+        new_access = created["pairing"]
+        if not args.hall:
+            args.api, args.session = new_access["api"], new_access["session"]
     if args.hall:
         args.session, args.source = "hall", "reference"
         if "--token-env" not in (argv if argv is not None else sys.argv):
@@ -174,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
             "server URL and session are required (--api/--session or DRONE_LIVE_URL/DRONE_LIVE_SESSION)"
         )
 
-    token = os.environ.get(args.token_env)
+    token = new_access["token"] if new_access and not args.hall else os.environ.get(args.token_env)
     if not token:
         parser.error(f"environment variable {args.token_env} is not set")
     # Streams stamped here on receipt (VRPN) use a time base without steps, and the clock
