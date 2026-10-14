@@ -8,6 +8,10 @@
         while flying:
             drone.pose(x, y, z, yaw, timestamp)
 
+Navigating relative to the start instead? ``drone.pose_relative(...)`` takes the start-
+relative estimate and sends it in hall coordinates when the hall measured the start, else
+in course coordinates (``wait_start()`` tells which). See ``startframe``.
+
 After ``drone-challenge login`` every ``Drone()`` creates its own session for the active
 challenge course the organiser set (``Drone(course=...)`` names another released course).
 Otherwise access comes from ``drone-challenge pair`` or the DRONE_LIVE_* environment
@@ -18,16 +22,19 @@ inside (see ``diha_participant`` for the advanced API).
 
 from __future__ import annotations
 
+import threading
+import time
 import warnings
 
 from diha_participant.live import DroneLive
 
 from . import pairing
 from .course import Course
+from .startframe import StartFrame, StartFrameError
 from .vehicle import validate_size
 
-__all__ = ["Course", "Drone", "__version__"]
-__version__ = "0.7.5"
+__all__ = ["Course", "Drone", "StartFrameError", "__version__"]
+__version__ = "0.7.6"
 
 
 class Drone(DroneLive):
@@ -84,6 +91,9 @@ class Drone(DroneLive):
         super().__init__(
             source.get("api"), source.get("session"), source.get("token"), **{**defaults, **options}
         )
+        self._frame: StartFrame | None = None
+        self._relative: list[tuple[float, float, float, float, float]] = []
+        self._relative_lock = threading.Lock()
 
     def course(self) -> Course | None:
         """The session's course: ``.waypoints`` / ``.route`` relative to the start pose,
@@ -112,3 +122,63 @@ class Drone(DroneLive):
         stamp: float | None = None,
     ) -> bool:
         return super().pose(x, y, z, yaw, stamp=timestamp if timestamp is not None else stamp)
+
+    # Start-relative poses ---------------------------------------------------------------
+
+    def wait_start(self, timeout_s: float = 3.5) -> bool:
+        """Keep the drone still on the start mark until this returns. True: the hall
+        measured the start (poses go out in hall coordinates, scored); False: no
+        measurement (own test, course coordinates) or offline. Raises StartFrameError
+        when the measurement is unusable, e.g. the drone moved: start again."""
+        frame = self._start_frame(timeout_s)
+        hall = frame.wait(timeout_s + 15.0)
+        self._flush_relative()
+        return hall
+
+    def pose_relative(
+        self, x: float, y: float, z: float, yaw: float = 0.0, timestamp: float | None = None
+    ) -> bool:
+        """Like ``pose()``, but relative to the start: x right, y forward, z up (metres),
+        yaw 0 = heading at the start. Never blocks: until the start is decided the poses
+        are kept with their own timestamps and sent afterwards."""
+        stamp = time.time() if timestamp is None else float(timestamp)
+        frame = self._start_frame()
+        with self._relative_lock:  # keeps buffered and new poses in time order
+            if not frame.resolved:
+                self._relative.append((x, y, z, yaw, stamp))
+                return True
+            self._send_relative(frame)
+            if frame.error:
+                self.dropped += 1
+                return False
+            return self.pose(*frame.apply(x, y, z, yaw), stamp)
+
+    def stop(self, end_stamp: float | None = None, timeout_s: float = 30.0):
+        frame = self._frame
+        if frame is not None and self._relative:
+            try:
+                frame.wait(timeout_s)
+            except (TimeoutError, StartFrameError):
+                pass
+            self._flush_relative()
+        return super().stop(end_stamp, timeout_s)
+
+    def _start_frame(self, timeout_s: float = 3.5) -> StartFrame:
+        with self._relative_lock:
+            if self._frame is None:
+                self._frame = StartFrame(self.course, timeout_s)
+            return self._frame
+
+    def _flush_relative(self) -> None:
+        frame = self._frame
+        if frame is not None and frame.resolved:
+            with self._relative_lock:
+                self._send_relative(frame)
+
+    def _send_relative(self, frame: StartFrame) -> None:
+        pending, self._relative = self._relative, []
+        for x, y, z, yaw, stamp in pending:
+            if frame.error:
+                self.dropped += 1
+            else:
+                self.pose(*frame.apply(x, y, z, yaw), stamp)

@@ -7,7 +7,7 @@ Python-Paket für Teams der **Drone Challenge** (Trajectory Lab): eigene Positio
 ## Installation
 
 ```bash
-python3 -m pip install ./drone-challenge-0.7.5.zip
+python3 -m pip install ./drone-challenge-0.7.6.zip
 ```
 
 Das ZIP vorher unter **Dokumentation → Downloads** herunterladen und den Befehl im Download-Ordner ausführen. Alternativ nach dem Entpacken im Ordner mit `pyproject.toml`: `python3 -m pip install .`.
@@ -50,7 +50,7 @@ Offline aufzeichnen und später nachreichen: derselbe Python-Code ohne Kopplung,
 |---|---|
 | `drone_challenge` | Teilnehmer-Schnittstelle: `Drone`, `Course`, `ros2.Challenge`, Kommandozeile `drone-challenge` |
 | `diha_participant` | Unterbau: Aufzeichnung, Upload mit Wiederholung, Uhrabgleich, Forwarder `drone-live` (ROS2, VRPN, CSV) |
-| `examples/` | `beispiel_python.py`, `beispiel_ros2_node.py` |
+| `examples/` | `beispiel_python.py`, `beispiel_relativ.py`, `beispiel_ros2_node.py` |
 
 Geheimnisse (Passwort, Team-Schlüssel, Session-Token) werden nie als Kommandozeilenargument übergeben und mit Rechten 0600 abgelegt.
 
@@ -117,3 +117,25 @@ Kurse ohne Fahrzeugprofil bleiben unverändert: Größen werden gespeichert und
 angezeigt, aber nicht ausgewertet. Das Modell bleibt eine Hüllkugel um M0, am Boden
 ein Hüllkreis unter M0; ein Versatz zwischen Marker und Fahrzeugmitte wird nicht
 berücksichtigt.
+
+### Relativ zum Start navigieren ab 0.7.6
+
+Navigiert euer System relativ zum Startpunkt, übernimmt das SDK die Umrechnung. Derselbe Code
+läuft in der Halle und beim Eigentest ohne Kamerasystem:
+
+```python
+with Drone(trial_id="team03-1530") as drone:
+    halle = drone.wait_start()               # Drohne steht still; True = Start in der Halle gemessen
+    ziele = drone.course().waypoints         # relativ zum Start
+    drone.takeoff()
+    while fliegt:
+        drone.pose_relative(x, y, z, yaw, zeitstempel)
+```
+
+`pose_relative()` nimmt x rechts, y vorne, z oben (Meter) und yaw (Radiant, 0 = Blickrichtung
+beim Start). Hat das Kamerasystem den Start gemessen, gehen die Posen in Hallenkoordinaten hinaus,
+sonst in Kurskoordinaten; dann erstellt der Server einen Übungsbericht. Offline wird die relative
+Pose unverändert aufgezeichnet. Bis die Entscheidung gefallen ist (höchstens 3,5 s), werden Posen
+mit ihrem Zeitstempel zurückgehalten und danach gesendet. Hat sich die Drohne beim Start bewegt,
+wirft `wait_start()` einen `StartFrameError`: neu starten. `pose()` bleibt unverändert für Teams,
+die selbst in Hallenkoordinaten rechnen.
