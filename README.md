@@ -51,6 +51,19 @@ ROS2 ohne eigenen Code für die Posen:
 drone-challenge ros2 /navigation/pose
 ```
 
+**Pro Lauf mit ROS2:**
+
+```bash
+drone-challenge session new          # Session auf dem aktiven Kurs
+drone-challenge course --json        # Start, Ziel, Hindernisse/Wände
+drone-challenge ros2 /euer/pose_topic   # zweites Terminal, läuft durchgehend, VOR event start
+drone-challenge event start          # Fahrzeug steht auf start_course, Blick +X; danach 1 s stillstehen
+# ... fahren ...
+drone-challenge event stop           # sobald das Fahrzeug steht (ab 0.8.2 auch: event flight_end)
+```
+
+Die Posen müssen in Hallenkoordinaten sein: Die Schätzung beginnt auf `start_course`. Ohne `event start` bindet der Server die Halle nicht, es gibt dann keine OptiTrack-Daten. 5 bis 7 s nach `event stop` wertet der Server automatisch aus.
+
 Offline aufzeichnen und später nachreichen: derselbe Python-Code ohne Kopplung, danach `drone-challenge upload flight-…`.
 
 ## Inhalt
