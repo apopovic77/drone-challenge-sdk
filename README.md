@@ -7,7 +7,7 @@ Python-Paket für Teams der **Drone Challenge** (Trajectory Lab): eigene Positio
 ## Installation
 
 ```bash
-python3 -m pip install ./drone-challenge-0.8.0.zip
+python3 -m pip install ./drone-challenge-0.8.1.zip
 ```
 
 Das ZIP vorher unter **Dokumentation → Downloads** herunterladen und den Befehl im Download-Ordner ausführen. Alternativ nach dem Entpacken im Ordner mit `pyproject.toml`: `python3 -m pip install .`.
@@ -15,7 +15,7 @@ Das ZIP vorher unter **Dokumentation → Downloads** herunterladen und den Befeh
 **Version prüfen und aktualisieren.** `drone-challenge --version` zeigt die installierte Version. Auf die aktuelle Version kommt ihr direkt vom Server, im selben Python-Umfeld (venv, conda) wie bei der ersten Installation; die Anmeldung bleibt erhalten:
 
 ```bash
-python3 -m pip install --upgrade https://drone-challenge.arkturian.com/api/v1/public/downloads/drone-challenge-0.8.0.zip
+python3 -m pip install --upgrade https://drone-challenge.arkturian.com/api/v1/public/downloads/drone-challenge-0.8.1.zip
 drone-challenge --version
 ```
 
@@ -76,6 +76,8 @@ Dieses Repository wird aus der Plattform veröffentlicht. Fragen und Fehler bitt
 ### Start und Wertung
 
 Live-Flüge werden ab `system_start` gewertet, ohne GNSS-Emulation oder Zehn-Sekunden-Frist. `Drone` meldet den Start beim Eintritt in den `with`-Block; `drone.start()` ist idempotent. Ohne Kontextmanager vor dem Abheben ausdrücklich `drone.start()` aufrufen. Bei ROS2 meldet `drone-challenge event start` den Start. `switch()` bleibt für alte Aufrufer als protokolliertes Ereignis erhalten, beeinflusst die Live-Wertung aber nicht.
+
+**Regel Positionsquellen (ab 0.8.1 meldbar).** Die bereitgestellte Kursgeometrie (OBJ/JSON) dürft ihr als Vorab-Karte nutzen, Startposition und -orientierung dürfen bekannt sein. Verboten ist jede externe Positionsquelle während des Laufs (OptiTrack/Hallendaten, GNSS, sonstige Fremdmessung). Wurde doch eine genutzt, meldet es: `drone.external_reference_used()` bzw. `drone-challenge event external_reference`.
 
 `drone.course().start_rule`, `.assist_distance_m` und `.assist_max_s` sowie `drone-challenge course --json` liefern die eingefrorene Sessionregel. Fehlende Starthilfe bedeutet 0 m, eine fehlende Zeitgrenze 10 s. Liefert ein älterer Server keine `start_rule`, ist sie im SDK `None` (JSON `null`): Die Regel dieses Servers ist dann unbekannt. Der historische CSV-Import mit `switch.txt` bleibt unverändert.
 

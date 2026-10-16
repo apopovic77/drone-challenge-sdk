@@ -35,6 +35,9 @@ class Challenge:  # pragma: no cover - needs a ROS2 installation
     def stop(self, stamp=None) -> str:
         return self._events.emit("flight_end", stamp)
 
+    def external_reference_used(self, stamp=None) -> str:
+        return self._events.emit("external_reference_used", stamp)
+
 
 def assistance_pose(value, message_type):
     """Exact raw reference stamp and hall frame, yaw-only orientation; no stale replay."""

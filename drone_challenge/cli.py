@@ -29,7 +29,13 @@ from diha_participant.client import ApiClient, ApiError
 from . import __version__, pairing
 from .ros2 import DEFAULT_TOPIC
 
-KINDS = {"start": "system_start", "takeoff": "takeoff", "switch": "switch", "stop": "flight_end"}
+KINDS = {
+    "start": "system_start",
+    "takeoff": "takeoff",
+    "switch": "switch",
+    "stop": "flight_end",
+    "external_reference": "external_reference_used",
+}
 TOKEN_ENV = "_DRONE_CHALLENGE_TOKEN"  # in-process only, handed to the forwarder
 
 

@@ -34,7 +34,7 @@ from .startframe import StartFrame, StartFrameError
 from .vehicle import validate_size
 
 __all__ = ["Course", "Drone", "StartFrameError", "__version__"]
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
 
 class Drone(DroneLive):

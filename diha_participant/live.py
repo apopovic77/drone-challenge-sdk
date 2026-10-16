@@ -140,6 +140,11 @@ class DroneLive:
         """Record a legacy event; it does not change the live scoring window."""
         self._event("switch", stamp)
 
+    def external_reference_used(self, stamp: float | None = None) -> None:
+        """Report that an external position source (OptiTrack/hall data, GNSS, any other
+        third-party measurement) was used during the run; it is listed in the result."""
+        self._event("external_reference_used", stamp)
+
     def pose(
         self, x: float, y: float, z: float, yaw: float = 0.0, stamp: float | None = None
     ) -> bool:
