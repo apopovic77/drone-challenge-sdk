@@ -177,7 +177,7 @@ keine Wertung.
 | Stufe | Session | Was ihr bekommt |
 |---|---|---|
 | 1 · Hinderniskurs | `session new --simulation --course <Advanced-Kurs>` | ein fester Kurs (`drone-challenge courses` zeigt ihn als „Advanced“) |
-| 2 · Zufallskurs | `session new --simulation --random [--seed 42] [--obstacles 8]` | jede Session ein neuer Kurs aus Halle und eurem Fahrzeug, garantiert lösbar; gleicher Seed, gleicher Kurs |
+| 2 · Zufallskurs | `session new --simulation --random [--seed 42] [--obstacles 8]` | jede Session ein neuer Kurs aus Halle und eurem Fahrzeug, garantiert lösbar: fester Start der Vorlage, Ziel und Hindernisse zufällig; gleicher Seed, gleicher Kurs |
 | 3 · Bewegliche Ziele | `session new --simulation --random --targets 1` | zusätzlich 1 bis 3 Ziele, die nach dem Start auf einer bekannten Bahn fahren |
 
 ```bash
@@ -235,7 +235,7 @@ drone-challenge course --json    # Start, Ziel, Hindernisse dieses Laufs
 ```
 
 1. Session erst anlegen, wenn ihr am Startplatz steht und der Veranstalter bereit ist. Jede Session ist ein neuer Kurs; Kurse nicht auf Vorrat holen (höchstens 30 Sessions pro Stunde).
-2. Fahrzeug auf `start_course` stellen, Blick in +X (`kurs.start_yaw_deg`, beim Boden-Parcours 0°). Dann fallen Kurs- und Hallenkoordinaten praktisch zusammen.
+2. Der Start ist immer derselbe: der Startpunkt der Vorlage, beim Boden-Parcours der Slalom-Start links unten (x −1,9, y −1,9), Blick in +X (`kurs.start_yaw_deg` = 0°). Nur Ziel und Hindernisse wechseln. Fahrzeug dort aufstellen; Kurs- und Hallenkoordinaten fallen dann praktisch zusammen.
 3. Start-Ereignis senden, mindestens 0,3 s stillstehen. Das Kamerasystem misst dabei die Startpose; der ganze Kurs wird genau dort verankert (Position und Blickrichtung).
 4. Nach der Verankerung liefert ein neues `drone.course()` die Hallenform (`kurs.anchored`, `kurs.hall_goal()`); `kurs.anchor` enthält Startpose und Drehung für eigene Umrechnungen.
 5. Fahren, dabei eure Posen live senden. Abschluss und Auswertung macht der Veranstalter: OptiTrack-Vergleich wie immer, dazu Ziel erreicht und Hindernis-Kontakte (virtuelle Hindernisse).
