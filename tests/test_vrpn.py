@@ -46,3 +46,32 @@ def test_client_decodes_named_tracker_only():
     assert client.server_version == "vrpn: ver. 07.33"
     assert client.known_trackers() == ["dummy1", "other"]
     listener.close()
+
+
+def test_tracker_can_switch_while_connected_and_matches_team_ids():
+    """--vrpn-tracker auto: the bridge switches rigid bodies without reconnecting."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+
+    def two_bodies(listener):
+        conn, _ = listener.accept()
+        with conn:
+            conn.sendall(b"vrpn: ver. 07.33  0".ljust(24, b"\x00"))
+            conn.recv(24)
+            conn.sendall(message(3, -1, description("Team01")) + message(5, -1, description("Team03")))
+            conn.sendall(message(7, -2, description("vrpn_Tracker Pos_Quat")))
+            for i in range(40):
+                conn.sendall(message(3, 7, POS_QUAT_BODY.pack(0, 0, 1, 1, 1, 0, 0, 0, 1), usec=i))
+                conn.sendall(message(5, 7, POS_QUAT_BODY.pack(0, 0, 3, 3, 3, 0, 0, 0, 1), usec=i))
+
+    threading.Thread(target=two_bodies, args=(listener,), daemon=True).start()
+    client = VrpnTrackerClient("127.0.0.1", "team01", port)
+    seen = []
+    for report in client.reports():
+        seen.append(report.position[0])
+        if len(seen) == 2:
+            client.tracker = "team03"  # hall now bound to team03
+        if len(seen) == 4:
+            break
+    assert seen == [1.0, 1.0, 3.0, 3.0]
+    listener.close()

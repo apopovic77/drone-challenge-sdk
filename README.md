@@ -7,10 +7,19 @@ Python-Paket für Teams der **Drone Challenge** (Trajectory Lab): eigene Positio
 ## Installation
 
 ```bash
-python3 -m pip install ./drone-challenge-0.7.6.zip
+python3 -m pip install ./drone-challenge-0.8.0.zip
 ```
 
 Das ZIP vorher unter **Dokumentation → Downloads** herunterladen und den Befehl im Download-Ordner ausführen. Alternativ nach dem Entpacken im Ordner mit `pyproject.toml`: `python3 -m pip install .`.
+
+**Version prüfen und aktualisieren.** `drone-challenge --version` zeigt die installierte Version. Auf die aktuelle Version kommt ihr direkt vom Server, im selben Python-Umfeld (venv, conda) wie bei der ersten Installation; die Anmeldung bleibt erhalten:
+
+```bash
+python3 -m pip install --upgrade https://drone-challenge.arkturian.com/api/v1/public/downloads/drone-challenge-0.8.0.zip
+drone-challenge --version
+```
+
+Unter Windows `py -m pip …` statt `python3 -m pip …`.
 
 Python ab 3.10, keine weiteren Abhängigkeiten. Für den ROS2-Weg wird `rclpy` aus eurer ROS2-Installation verwendet.
 
@@ -50,7 +59,7 @@ Offline aufzeichnen und später nachreichen: derselbe Python-Code ohne Kopplung,
 |---|---|
 | `drone_challenge` | Teilnehmer-Schnittstelle: `Drone`, `Course`, `ros2.Challenge`, Kommandozeile `drone-challenge` |
 | `diha_participant` | Unterbau: Aufzeichnung, Upload mit Wiederholung, Uhrabgleich, Forwarder `drone-live` (ROS2, VRPN, CSV) |
-| `examples/` | `beispiel_python.py`, `beispiel_relativ.py`, `beispiel_ros2_node.py` |
+| `examples/` | `beispiel_python.py`, `beispiel_relativ.py`, `beispiel_ros2_node.py`, `beispiel_simulation.py`, `beispiel_auswertung.py`, `beispiel_hindernisse.py`, `beispiel_ziel.py` |
 
 Geheimnisse (Passwort, Team-Schlüssel, Session-Token) werden nie als Kommandozeilenargument übergeben und mit Rechten 0600 abgelegt.
 
@@ -139,3 +148,85 @@ Pose unverändert aufgezeichnet. Bis die Entscheidung gefallen ist (höchstens 3
 mit ihrem Zeitstempel zurückgehalten und danach gesendet. Hat sich die Drohne beim Start bewegt,
 wirft `wait_start()` einen `StartFrameError`: neu starten. `pose()` bleibt unverändert für Teams,
 die selbst in Hallenkoordinaten rechnen.
+
+## Daten nach dem Flug laden (ab 0.7.7)
+
+Sobald eine Session abgeschlossen ist (nach „Beenden“ bzw. „Auswerten“ des Veranstalters
+oder nach der eigenen Testauswertung im Team-Portal), lädt das Team seine Daten:
+
+```bash
+drone-challenge data --list            # eigene Sessions mit ID und Zustand
+drone-challenge data                   # aktuelle Session (letztes `session new`)
+drone-challenge data <SESSION-ID> --out flug1
+```
+
+Der Ordner enthält `team.csv` (eigene Posen), `reference.csv` (OptiTrack-Referenz in
+Hallenkoordinaten), `events.csv`, `course.json` (Kurs mit gemessenem Startanker) und
+`finish.json` (Ergebnis). Während eine Session läuft, gibt es keine Referenzdaten.
+Dieselben Daten stehen im Team-Portal unter „Meine Sessions“ als JSON zum Download.
+
+
+## Advanced-Training: Hindernisse und bewegliche Ziele (ab 0.8.0)
+
+Ohne GNSS selbst navigieren: Bekannt sind nur Start, Ziel und die Hindernisse, den Weg
+plant ihr. Alles läuft im Simulator (`--simulation`), ohne Halle und ohne OptiTrack. Am
+Ende meldet der Server, ob und wann ihr das Ziel erreicht habt, ob ihr ein Hindernis
+berührt habt und wie nah ihr einem beweglichen Ziel gekommen seid. Das ist Training,
+keine Wertung.
+
+| Stufe | Session | Was ihr bekommt |
+|---|---|---|
+| 1 · Hinderniskurs | `session new --simulation --course <Advanced-Kurs>` | ein fester Kurs (`drone-challenge courses` zeigt ihn als „Advanced“) |
+| 2 · Zufallskurs | `session new --simulation --random [--seed 42] [--obstacles 8]` | jede Session ein neuer Kurs aus Halle und eurem Fahrzeug, garantiert lösbar; gleicher Seed, gleicher Kurs |
+| 3 · Bewegliche Ziele | `session new --simulation --random --targets 1` | zusätzlich 1 bis 3 Ziele, die nach dem Start auf einer bekannten Bahn fahren |
+
+```bash
+drone-challenge session new --simulation --random --targets 1
+drone-challenge course            # Start, Ziel, Hindernisse, bewegliche Ziele
+drone-challenge course --json     # dasselbe maschinenlesbar
+# ... euren Simulator laufen lassen ...
+drone-challenge finish            # Auswertung
+drone-challenge data              # Daten als CSV
+```
+
+```python
+from drone_challenge import Drone
+
+drone = Drone(simulation=True, random=True, targets=1)  # seed=42 wiederholt den Kurs
+kurs = drone.course()
+start, ziel = kurs.start_course, kurs.goal_course       # Kurskoordinaten, Meter
+kurs.obstacles                  # Boxen: Mitte x/y, width (X), depth (Y), height, base_z
+kurs.collides(x, y, z)          # berührt euer Fahrzeug dort eine Box oder Wand?
+kurs.clearance(x, y, z)         # freier Abstand in Metern (negativ = Kontakt)
+kurs.target_position(0, t)      # bewegliches Ziel 0, t Sekunden nach dem Start-Ereignis
+```
+
+**Koordinaten.** Hindernisse, Start, Ziel und Zielbahnen stehen in Kurskoordinaten
+(rechtshändig, Z nach oben). Simuliert in denselben Koordinaten: Dann verankert sich der
+Kurs ohne Drehung genau auf eurem Start. Dafür trägt das Start-Ereignis den Zeitstempel
+der ersten Position, und das Fahrzeug steht danach mindestens 0,3 s still, **auch ohne
+zu drehen**.
+
+**Kontakt.** `collides()` und `clearance()` rechnen wie der Server: eine Kugel um M0 mit
+halber Diagonale des Fahrzeugs (am Boden ein Kreis, Höhe zählt nicht) plus
+Sicherheitsabstand, gegen die Boxen und die Hallenwände.
+
+**Bewegliche Ziele.** Jedes Ziel wartet `start_delay_s` und fährt dann seine Bahn `path`
+mit `speed_mps` ab: `loop` schließt die Bahn, `pingpong` fährt hin und zurück. Erreicht
+ist es, sobald ihr innerhalb `radius_m` seid. `target_position()` ist genau die Funktion,
+mit der der Server auswertet.
+
+**Ergebnis** (`finish`, auch im Team-Portal unter „Meine Sessions“ mit 3D-Ansicht) unter
+`practice.course_evidence`:
+
+| Feld | Inhalt |
+|---|---|
+| `goal_reached` | `reached`, `reached_at_s` (Sekunden nach dem Start), `minimum_m` (kleinster Abstand zum Ziel) |
+| `wall_contacts` | `count`, `duration_s`, `minimum_m`, je Hindernis `obstacles` |
+| `targets` | je Ziel: `reached`, `reached_at_s`, `minimum_m`, `mean_m`, `inside_s` (Zeit im Radius) |
+
+Grundlage ist eure eigene Schätzung über den Selbstanker, keine Referenzmessung.
+
+**Beispiele:** `examples/beispiel_hindernisse.py` plant mit A* um die Hindernisse und
+fliegt den Weg ab; `examples/beispiel_ziel.py` verfolgt ein bewegliches Ziel. Beide laufen
+ohne Änderung, sobald `drone-challenge login` erledigt ist.

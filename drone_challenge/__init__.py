@@ -34,7 +34,7 @@ from .startframe import StartFrame, StartFrameError
 from .vehicle import validate_size
 
 __all__ = ["Course", "Drone", "StartFrameError", "__version__"]
-__version__ = "0.7.6"
+__version__ = "0.8.0"
 
 
 class Drone(DroneLive):
@@ -54,13 +54,22 @@ class Drone(DroneLive):
         *,
         new_session: bool = True,
         size_m: tuple[float, float, float] | None = None,
+        simulation: bool = False,
+        random: bool = False,
+        seed: int | None = None,
+        obstacles: int | None = None,
+        targets: int | None = None,
         **options,
     ) -> None:
         """``course``: create a new session for this released course first (needs
         ``drone-challenge login``). Without it a logged-in computer creates one for the
         active challenge course; ``new_session=False`` keeps the current pairing instead
         (e.g. a QR code from the organiser). Not logged in: the pairing, the environment,
-        or offline recording."""
+        or offline recording.
+
+        Advanced training: ``random=True`` builds a fresh obstacle course from the course's
+        hall and vehicle (``seed`` repeats one, ``obstacles`` boxes, ``targets`` moving
+        targets 0-3); start and goal are given, the team plans the way."""
         from . import team
 
         size_m = validate_size(size_m)
@@ -68,11 +77,22 @@ class Drone(DroneLive):
         if size_m is not None and (not new_session or env or not team.load()):
             raise ValueError("size_m requires a new session with team login; existing pairings "
                              "and offline recordings cannot change a frozen session profile")
-        if course or (new_session and not env and team.load()):
+        if random and not team.load():
+            raise ValueError("random courses need drone-challenge login")
+        if course or random or (new_session and not env and team.load()):
             try:
-                team.new_session(course, trial_id, size_m=size_m)
+                team.new_session(
+                    course,
+                    trial_id,
+                    size_m=size_m,
+                    simulation=simulation,
+                    random=random,
+                    seed=seed,
+                    obstacles=obstacles,
+                    targets=targets,
+                )
             except team.TeamError as exc:
-                if course or size_m is not None:
+                if course or random or size_m is not None:
                     raise
                 warnings.warn(
                     f"Keine Session für den Challenge-Kurs angelegt ({exc}); "

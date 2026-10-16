@@ -125,10 +125,12 @@ class DroneLive:
         if self._started:
             return self
         self._started = True
-        if self.client is not None and self.clock_sync_s > 0:
-            self._sync_clock()
-            threading.Thread(target=self._clock_loop, name="drone-live-clock", daemon=True).start()
+        stamp = time.time() if stamp is None else stamp
         self._event("system_start", stamp)
+        if self.client is not None and self.clock_sync_s > 0:
+            # In the background: a blocking first measurement (several round trips) left
+            # a gap in the poses right after the start, where the start pose is measured.
+            threading.Thread(target=self._clock_loop, name="drone-live-clock", daemon=True).start()
         return self
 
     def takeoff(self, stamp: float | None = None) -> None:
@@ -209,5 +211,6 @@ class DroneLive:
             pass  # documented by the server when it works; never blocks the flight
 
     def _clock_loop(self) -> None:
+        self._sync_clock()
         while not self._stop.wait(self.clock_sync_s):
             self._sync_clock()

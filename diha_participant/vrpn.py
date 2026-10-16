@@ -54,6 +54,12 @@ def _recv_exact(sock: socket.socket, size: int) -> bytes:
     return bytes(data)
 
 
+def same_name(a: str | None, b: str | None) -> bool:
+    """Rigid body and team names match ignoring case and separators: Team03 == team03."""
+    norm = lambda n: "".join(c for c in (n or "").lower() if c.isalnum())  # noqa: E731
+    return bool(norm(a)) and norm(a) == norm(b)
+
+
 def _description_name(payload: bytes) -> str:
     (length,) = struct.unpack_from("!i", payload)
     return payload[4 : 4 + length].split(b"\x00", 1)[0].decode("ascii", "replace")
@@ -65,7 +71,7 @@ class VrpnTrackerClient:
     def __init__(
         self,
         host: str,
-        tracker: str,
+        tracker: str | None,
         port: int = 3883,
         *,
         sensor: int | None = 0,
@@ -109,7 +115,7 @@ class VrpnTrackerClient:
                 elif (
                     msg_type >= 0
                     and self.types.get(msg_type) == POS_QUAT
-                    and self.senders.get(sender) == self.tracker
+                    and same_name(self.senders.get(sender), self.tracker)
                     and len(body) >= POS_QUAT_BODY.size
                 ):
                     values = POS_QUAT_BODY.unpack_from(body)

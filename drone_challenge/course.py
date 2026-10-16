@@ -18,6 +18,13 @@ the server binds the course anchor and
     p_hall = measured_start + Rz(rotation) * (p - course_start)
 
 Before that (or in a practice session without motion capture) it returns None.
+
+Advanced training (course coordinates, i.e. the frame of ``obstacles`` and ``goal_course``;
+a simulator that works in course coordinates gets a start anchor without rotation):
+
+    course.collides(x, y, z)            # True if the vehicle at (x, y, z) touches a box or wall
+    course.clearance(x, y, z)           # metres of free space left around the vehicle
+    course.target_position(0, t)        # moving target 0, t seconds after the start event
 """
 
 from __future__ import annotations
@@ -76,6 +83,99 @@ class Course:
         if self.route_mode == "environment" and self.environment:
             self.course_start = tuple(map(float, self.environment["start"]))
         self.anchor: dict | None = response.get("anchor")
+        # Moving targets (advanced training): path in course coordinates, see target_position.
+        self.targets: list[dict] = deepcopy(course.get("targets") or [])
+
+    # Advanced training, course coordinates -------------------------------------------------
+
+    @property
+    def goal_course(self) -> tuple[float, float, float] | None:
+        """Goal in course coordinates (the frame of ``obstacles``); None without a goal."""
+        return tuple(map(float, self.environment["goal"])) if self.environment else None
+
+    @property
+    def start_course(self) -> tuple[float, float, float]:
+        """Start in course coordinates (the frame of ``obstacles``)."""
+        return self.course_start
+
+    def _profile(self) -> dict | None:
+        frozen = (self.vehicle_profile or {}).get("profile")
+        return frozen or self.drone_profile
+
+    @property
+    def ground(self) -> bool:
+        return self.motion_model == "ground"
+
+    def vehicle_radius(self) -> float:
+        """Radius the server checks contacts with (diagonal / 2), plus the safety margin."""
+        p = self._profile()
+        if not p:
+            return 0.0
+        height = 0.0 if self.ground else p["height"]
+        return math.hypot(p["width"], p["depth"], height) / 2 + p.get("safety_margin", 0.0)
+
+    def clearance(self, x: float, y: float, z: float) -> float:
+        """Free distance (m) between the vehicle envelope at (x, y, z) and the nearest box or
+        hall wall; negative means contact. Course coordinates, same rule as the server."""
+        radius = self.vehicle_radius()
+        p = self._profile() or {}
+        h = self.hall or {}
+        best = math.inf
+        if h:
+            best = min(x - h["x_min"], h["x_max"] - x, y - h["y_min"], h["y_max"] - y)
+            if not self.ground:
+                best = min(best, z, h["height"] - z)
+        for box in self.obstacles:
+            base = float(box.get("base_z", 0.0))
+            if self.ground:
+                if base >= p.get("height", 0.0):
+                    continue  # passes under it
+                dz = 0.0
+            else:
+                dz = max(base - z, 0.0, z - base - box["height"])
+            dx = max(abs(x - box["x"]) - box["width"] / 2, 0.0)
+            dy = max(abs(y - box["y"]) - box["depth"] / 2, 0.0)
+            best = min(best, math.sqrt(dx * dx + dy * dy + dz * dz))
+        return best - radius
+
+    def collides(self, x: float, y: float, z: float, margin: float = 0.0) -> bool:
+        """True if the vehicle at (x, y, z) touches a box or the hall (plus ``margin``)."""
+        return self.clearance(x, y, z) < margin
+
+    def target_position(self, target: int | str, t: float) -> tuple[float, float, float]:
+        """Moving target position, course coordinates, ``t`` seconds after the start event.
+
+        ``target`` is the index or the id. The target waits ``start_delay_s``, then travels
+        its path at ``speed_mps``: ``loop`` closes the path, ``pingpong`` goes forth and
+        back. Same function as the server evaluation.
+        """
+        if isinstance(target, str):
+            found = [x for x in self.targets if x["id"] == target]
+            if not found:
+                raise KeyError(target)
+            spec = found[0]
+        else:
+            spec = self.targets[target]
+        points = [tuple(map(float, p)) for p in spec["path"]]
+        if spec.get("mode", "loop") == "loop":
+            points.append(points[0])
+        lengths = [math.dist(a, b) for a, b in zip(points, points[1:])]
+        total = sum(lengths)
+        s = spec.get("speed_mps", 0.3) * max(0.0, t - spec.get("start_delay_s", 0.0))
+        if total <= 0:
+            return points[0]
+        if spec.get("mode", "loop") == "loop":
+            s %= total
+        else:
+            s %= 2 * total
+            if s > total:
+                s = 2 * total - s
+        for (a, b), length in zip(zip(points, points[1:]), lengths):
+            if s <= length:
+                f = s / length if length else 0.0
+                return tuple(a[k] + f * (b[k] - a[k]) for k in range(3))
+            s -= length
+        return points[-1]
 
     @property
     def goal(self) -> tuple[float, float, float] | None:

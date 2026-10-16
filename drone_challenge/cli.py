@@ -3,6 +3,7 @@
     drone-challenge login team03               # once per computer: team password -> team key
     drone-challenge courses                    # released courses
     drone-challenge session new [--course NAME] # own session (default: active challenge course)
+    drone-challenge session new --simulation --random [--targets 1]  # random obstacle course
     drone-challenge pair                       # or: paste a pairing code (from QR / web page)
     drone-challenge status                     # what is paired, is the access valid
     drone-challenge ros2 /navigation/pose      # forward a ROS2 pose topic live
@@ -100,10 +101,12 @@ def cmd_courses(args, parser) -> int:
         print("Keine freigegebenen Kurse.")
     for c in items:
         mark = "  ← aktiver Challenge-Kurs" if c.get("active") else ""
-        print(
-            f"{c['course_id']:<32} {c['name']} (Version {c['version']}, "
-            f"{c['length_m']:.1f} m){mark}"
+        kind = (
+            "Advanced: Start und Ziel, Weg selbst planen"
+            if c.get("route_mode") == "environment"
+            else f"{c['length_m']:.1f} m"
         )
+        print(f"{c['course_id']:<32} {c['name']} (Version {c['version']}, {kind}){mark}")
     return 0
 
 
@@ -111,7 +114,17 @@ def cmd_session(args, parser) -> int:
     from . import team
 
     try:
-        answer = team.new_session(args.course, args.trial, args.start, size_m=args.size_m)
+        answer = team.new_session(
+            args.course,
+            args.trial,
+            args.start,
+            size_m=args.size_m,
+            simulation=args.simulation,
+            random=args.random,
+            seed=args.seed,
+            obstacles=args.obstacles,
+            targets=args.targets,
+        )
     except (team.TeamError, ValueError) as exc:
         print(f"Session nicht angelegt: {exc}", file=sys.stderr)
         return 1
@@ -121,6 +134,83 @@ def cmd_session(args, parser) -> int:
         f"Versuch {config['trial_id']}, Kurs {config['course_id']} v{config['course_version']}"
     )
     print("Ist jetzt die aktuelle Kopplung: Drone(), ros2, upload und event verwenden sie.")
+    return 0
+
+
+def cmd_finish(args, parser) -> int:
+    from . import pairing, team
+
+    session = args.session or (pairing.load() or {}).get("session")
+    if not session:
+        print("Keine Session angegeben und keine aktuelle Kopplung.", file=sys.stderr)
+        return 1
+    try:
+        finished = team.finish(session)
+    except team.TeamError as exc:
+        print(f"Nicht ausgewertet: {exc}", file=sys.stderr)
+        return 1
+    result = (finished.get("finish") or {}).get("practice") or {}
+    if not result:
+        print(f"Session {session} abgeschlossen ({(finished.get('finish') or {}).get('mode')}).")
+        return 0
+    print(
+        f"Weg {result['path_length_m']:.2f} m in {result['duration_s']:.1f} s, "
+        f"{result['samples']} Posen; Abstand Ende–Start {result['closure_error_m']:.2f} m"
+    )
+    route = result.get("route_comparison") or {}
+    if route.get("status") == "computed":
+        print(
+            f"Kurs: Soll {route['planned_length_m']:.2f} m, geflogen {route['flown_length_m']:.2f} m, "
+            f"seitliche Abweichung mittel {route['cross_track_mean_m']:.3f} m, "
+            f"max {route['cross_track_max_m']:.3f} m"
+        )
+    else:
+        anchor = (result.get("route_anchor") or {}).get("reason") or "kein Startanker"
+        print(f"Kein Kursvergleich ({anchor}).")
+    print("Daten laden: drone-challenge data")
+    return 0
+
+
+def cmd_data(args, parser) -> int:
+    import csv
+    from pathlib import Path
+
+    from . import pairing, team
+
+    try:
+        if args.list:
+            for s in team.sessions():
+                created = time.strftime("%d.%m. %H:%M", time.localtime(s["created_at_ns"] / 1e9))
+                state = "offen" if s["state"] == "open" else "abgeschlossen"
+                print(f"{s['id']}  {created}  {s['config']['trial_id']:<28} {state}")
+            return 0
+        session = args.session or (pairing.load() or {}).get("session")
+        if not session:
+            print("Keine Session angegeben und keine aktuelle Kopplung.", file=sys.stderr)
+            return 1
+        data = team.session_data(session)
+    except team.TeamError as exc:
+        print(f"Daten nicht geladen: {exc}", file=sys.stderr)
+        return 1
+    folder = Path(args.out or f"daten-{data['session']['config']['trial_id']}")
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in ("team", "reference"):
+        with (folder / f"{name}.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(data["columns"])
+            writer.writerows(data[name])
+    with (folder / "events.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["source", "kind", "stamp_s"])
+        writer.writerows([e["source"], e["kind"], e["stamp_s"]] for e in data["events"])
+    for name in ("course", "finish", "session"):
+        (folder / f"{name}.json").write_text(
+            json.dumps(data[name], indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    print(
+        f"{folder}: {len(data['team'])} eigene Posen, {len(data['reference'])} OptiTrack-Posen, "
+        f"{len(data['events'])} Ereignisse, Kurs und Ergebnis"
+    )
     return 0
 
 
@@ -149,7 +239,25 @@ def cmd_course(args, parser) -> int:
         print(json.dumps({"course_id": course.course_id, "version": course.version,
                           "frame": "hall" if args.hall else "start", "waypoints": points,
                           "start_rule": course.start_rule, "assist_distance_m": course.assist_distance_m,
-                          "motion_model": course.motion_model, "marker_height_m": course.marker_height_m, "vehicle_profile": course.vehicle_profile}))
+                          "motion_model": course.motion_model, "marker_height_m": course.marker_height_m, "vehicle_profile": course.vehicle_profile,
+                          # Advanced training, course coordinates (the frame of the obstacles).
+                          "route_mode": course.route_mode, "hall": course.hall,
+                          "start_course": course.start_course, "goal_course": course.goal_course,
+                          "goal_radius_m": (course.environment or {}).get("goal_radius"),
+                          "obstacles": course.obstacles, "targets": course.targets}))
+        return 0
+    if course.route_mode == "environment":
+        print(f"{course.name} (Version {course.version}), Kurskoordinaten, Meter:")
+        print("Start  " + "  ".join(f"{v:7.3f}" for v in course.start_course))
+        print("Ziel   " + "  ".join(f"{v:7.3f}" for v in course.goal_course)
+              + f"   Radius {(course.environment or {}).get('goal_radius')}")
+        for o in course.obstacles:
+            print(f"Box {o['id']:<8} Mitte x {o['x']:6.2f} y {o['y']:6.2f}  "
+                  f"{o['width']:.2f} × {o['depth']:.2f} × {o['height']:.2f} ab z {o.get('base_z', 0):.2f}")
+        for tgt in course.targets:
+            print(f"Bewegliches Ziel {tgt['id']}: {len(tgt['path'])} Punkte, {tgt['speed_mps']} m/s, "
+                  f"{tgt['mode']}, Radius {tgt['radius_m']}, ab {tgt['start_delay_s']} s")
+        print("Den Weg plant ihr selbst; alles als JSON: drone-challenge course --json")
         return 0
     name = course.name or "eigene Sollroute"
     frame = "Hallenkoordinaten" if args.hall else "relativ zur Startpose (y = vorne beim Start)"
@@ -241,11 +349,34 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--trial", help="Versuchsname (Standard: FLUG-<Datum-Uhrzeit>)")
     p.add_argument("--start", choices=["system_start", "takeoff"], default="system_start")
     p.add_argument("--size-m", type=float, nargs=3, metavar=("WIDTH", "DEPTH", "HEIGHT"))
+    p.add_argument(
+        "--simulation",
+        action="store_true",
+        help="Simulator-Lauf: nie Hallendaten, Kurs am simulierten Start verankert",
+    )
+    p.add_argument(
+        "--random",
+        action="store_true",
+        help="Zufallskurs mit Hindernissen (Advanced-Training): Start und Ziel vorgegeben",
+    )
+    p.add_argument("--seed", type=int, help="Zufallskurs wiederholen (gleicher Seed, gleicher Kurs)")
+    p.add_argument("--obstacles", type=int, help="Anzahl Hindernisse im Zufallskurs (Standard 8)")
+    p.add_argument("--targets", type=int, help="bewegliche Ziele im Zufallskurs, 0 bis 3")
     p.set_defaults(run=cmd_session)
+    p = sub.add_parser("finish", help="eigene Test- oder Simulations-Session auswerten")
+    p.add_argument("session", nargs="?", help="Session-ID (Standard: die aktuelle Kopplung)")
+    p.set_defaults(run=cmd_finish)
     p = sub.add_parser("course", help="Kurs der aktuellen Session: Wegpunkte ab Start")
     p.add_argument("--hall", action="store_true", help="in Hallenkoordinaten (nach Startmessung)")
     p.add_argument("--json", action="store_true", help="als JSON ausgeben")
     p.set_defaults(run=cmd_course)
+    p = sub.add_parser(
+        "data", help="Daten einer abgeschlossenen Session laden (eigene Posen, OptiTrack, Ergebnis)"
+    )
+    p.add_argument("session", nargs="?", help="Session-ID (Standard: die aktuelle Kopplung)")
+    p.add_argument("--list", action="store_true", help="eigene Sessions auflisten")
+    p.add_argument("--out", help="Zielordner (Standard: daten-<Versuch>)")
+    p.set_defaults(run=cmd_data)
     p = sub.add_parser("status", help="Kopplung und Zugang prüfen")
     p.set_defaults(run=cmd_status)
     p = sub.add_parser("ros2", help="ROS2-Posen-Topic live übertragen")

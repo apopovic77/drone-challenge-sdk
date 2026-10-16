@@ -103,6 +103,28 @@ def hall_watch(uploader, stop: threading.Event) -> None:
             last = state
 
 
+def follow_hall(client: ApiClient, vrpn_client, stop: threading.Event) -> None:
+    """--vrpn-tracker auto: follow the rigid body of the team the hall is bound to.
+
+    Motive names the rigid bodies like the team accounts (Team03 for team03). The VRPN
+    connection carries every rigid body, so switching needs no reconnect; between two
+    flights the bridge stays on the last team.
+    """
+    while not stop.wait(1.0):
+        try:
+            state = client.hall_binding()
+        except ApiError as exc:
+            print(f"hall binding: {exc}", file=sys.stderr)
+            continue
+        # Bound: that team. Otherwise the team with the newest open hall session, so the
+        # rigid body is already followed when its start (and the start measurement) comes.
+        team = state.get("team_id") if state.get("state") == "bound" else state.get("next_team_id")
+        if team and team != vrpn_client.tracker:
+            why = f"hall bound to {state['session']}" if state.get("session") else "next hall session"
+            print(f"VRPN tracker -> {team} ({why})", file=sys.stderr)
+            vrpn_client.tracker = team
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -143,7 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument(
         "--vrpn", metavar="HOST[:PORT]", help="read a VRPN tracker directly, without ROS2"
     )
-    parser.add_argument("--vrpn-tracker", help="tracker / rigid body name for --vrpn")
+    parser.add_argument(
+        "--vrpn-tracker",
+        help="tracker / rigid body name for --vrpn; with --hall 'auto' follows the team the "
+        "hall is bound to (rigid body named like the team: Team03 for team03)",
+    )
     parser.add_argument("--vrpn-stamps", choices=("receive", "vrpn"), default="receive")
     parser.add_argument("--ros2-event-topic")
     parser.add_argument("--expected-frame")
@@ -271,13 +297,20 @@ def main(argv: list[str] | None = None) -> int:
                 if on_pose is not None:
                     on_pose(pose)
 
+            follow = args.vrpn_tracker.lower() == "auto"
+            if follow and not args.hall:
+                parser.error("--vrpn-tracker auto needs --hall")
             client_vrpn = VrpnTrackerClient(
                 host,
-                args.vrpn_tracker,
+                None if follow else args.vrpn_tracker,
                 int(port or 3883),
                 on_hint=lambda m: print(m, file=sys.stderr),
                 **({"clock": stable.time} if stable else {}),
             )
+            if follow:
+                threading.Thread(
+                    target=follow_hall, args=(client, client_vrpn, stop), daemon=True
+                ).start()
             try:
                 run_forever(client_vrpn, on_report, log=lambda m: print(m, file=sys.stderr))
             except KeyboardInterrupt:

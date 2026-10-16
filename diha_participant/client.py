@@ -61,6 +61,10 @@ class ApiClient:
     def clock(self) -> dict:
         return self._request("GET", "clock")
 
+    def hall_binding(self) -> dict:
+        """Hall key only: the session and team the hall stream feeds right now."""
+        return self._request("GET", "binding")
+
     def course(self) -> dict:
         """Planned route, course geometry and anchor of this session (raw, hall frame)."""
         return self._request("GET", "course")

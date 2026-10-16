@@ -101,9 +101,29 @@ def courses() -> list[dict]:
     return _call(data["api"], "GET", "courses", key=data["key"])["items"]
 
 
+def sessions() -> list[dict]:
+    """The team's own sessions, newest first."""
+    data = _require()
+    return _call(data["api"], "GET", "sessions", key=data["key"])["items"]
+
+
+def session_data(session_id: str) -> dict:
+    """Recorded data of one closed session: team estimate, OptiTrack reference, events,
+    course and result."""
+    data = _require()
+    return _call(data["api"], "GET", f"sessions/{session_id}/data", key=data["key"])
+
+
+def finish(session_id: str) -> dict:
+    """Evaluate one of the team's own test or simulation sessions (not hall flights)."""
+    data = _require()
+    return _call(data["api"], "POST", f"sessions/{session_id}/finish", key=data["key"])
+
+
 def new_session(
     course: str | None = None, trial_id: str | None = None, start: str = "system_start",
-    *, size_m=None
+    *, size_m=None, simulation: bool = False, random: bool = False, seed: int | None = None,
+    obstacles: int | None = None, targets: int | None = None
 ) -> dict:
     """Create a session for a released course (None: the active challenge course the
     organiser set); it becomes the current pairing."""
@@ -118,6 +138,15 @@ def new_session(
         body["course"] = course
     if trial_id:
         body["trial_id"] = trial_id
+    if simulation:
+        # Simulator run: never fed from the hall, course anchored at the simulated start.
+        body["simulation"] = True
+    if random:
+        # Advanced training: a fresh random obstacle course (same seed, same course).
+        body["random"] = True
+        for name, value in (("seed", seed), ("obstacles", obstacles), ("targets", targets)):
+            if value is not None:
+                body[name] = int(value)
     answer = _call(data["api"], "POST", "sessions", body, key=data["key"])
     pairing.save(pairing.parse(json.dumps(answer["pairing"])))
     warn_profile(answer["session"]["config"].get("vehicle_profile"))
