@@ -35,6 +35,11 @@ KINDS = {
     "switch": "switch",
     "stop": "flight_end",
     "external_reference": "external_reference_used",
+    # The server's own event names work too (16.10.: teams typed "event flight_end").
+    "system_start": "system_start",
+    "flight_end": "flight_end",
+    "end": "flight_end",
+    "external_reference_used": "external_reference_used",
 }
 TOKEN_ENV = "_DRONE_CHALLENGE_TOKEN"  # in-process only, handed to the forwarder
 
