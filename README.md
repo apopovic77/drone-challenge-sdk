@@ -169,7 +169,7 @@ Dieselben Daten stehen im Team-Portal unter „Meine Sessions“ als JSON zum Do
 ## Advanced-Training: Hindernisse und bewegliche Ziele (ab 0.8.0)
 
 Ohne GNSS selbst navigieren: Bekannt sind nur Start, Ziel und die Hindernisse, den Weg
-plant ihr. Alles läuft im Simulator (`--simulation`), ohne Halle und ohne OptiTrack. Am
+plant ihr. Training läuft im Simulator (`--simulation`), ohne Halle und ohne OptiTrack; Zufallskurse gehen auch in der Halle (siehe unten). Am
 Ende meldet der Server, ob und wann ihr das Ziel erreicht habt, ob ihr ein Hindernis
 berührt habt und wie nah ihr einem beweglichen Ziel gekommen seid. Das ist Training,
 keine Wertung.
@@ -226,6 +226,19 @@ mit der der Server auswertet.
 | `targets` | je Ziel: `reached`, `reached_at_s`, `minimum_m`, `mean_m`, `inside_s` (Zeit im Radius) |
 
 Grundlage ist eure eigene Schätzung über den Selbstanker, keine Referenzmessung.
+
+**Zufallskurs in der Halle (Boden).** `--random` geht auch ohne `--simulation`: Der Server erzeugt den Kurs genau beim Anlegen der Session, vorher kennt ihn niemand. Für Bodenfahrzeuge als Vorlage den Boden-Parcours nehmen (Halle 5 × 5 m; dessen feste Kisten und Route werden nicht übernommen):
+
+```bash
+drone-challenge session new --random --course boden-parcours-5x5   # ohne --simulation
+drone-challenge course --json    # Start, Ziel, Hindernisse dieses Laufs
+```
+
+1. Session erst anlegen, wenn ihr am Startplatz steht und der Veranstalter bereit ist. Jede Session ist ein neuer Kurs; Kurse nicht auf Vorrat holen (höchstens 30 Sessions pro Stunde).
+2. Fahrzeug auf `start_course` stellen, Blick in +X (`kurs.start_yaw_deg`, beim Boden-Parcours 0°). Dann fallen Kurs- und Hallenkoordinaten praktisch zusammen.
+3. Start-Ereignis senden, mindestens 0,3 s stillstehen. Das Kamerasystem misst dabei die Startpose; der ganze Kurs wird genau dort verankert (Position und Blickrichtung).
+4. Nach der Verankerung liefert ein neues `drone.course()` die Hallenform (`kurs.anchored`, `kurs.hall_goal()`); `kurs.anchor` enthält Startpose und Drehung für eigene Umrechnungen.
+5. Fahren, dabei eure Posen live senden. Abschluss und Auswertung macht der Veranstalter: OptiTrack-Vergleich wie immer, dazu Ziel erreicht und Hindernis-Kontakte (virtuelle Hindernisse).
 
 **Beispiele:** `examples/beispiel_hindernisse.py` plant mit A* um die Hindernisse und
 fliegt den Weg ab; `examples/beispiel_ziel.py` verfolgt ein bewegliches Ziel. Beide laufen
